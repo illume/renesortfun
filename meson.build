@@ -1,4 +1,10 @@
 project('renesortfun', 'c')
-add_global_arguments('-march=native', language : 'c')
+add_global_arguments('-mavx512f', language : 'c')
+add_global_arguments('-fno-trapping-math', language : 'c')
+add_global_arguments('-fno-math-errno', language : 'c')
+add_global_arguments('-fno-signed-zeros', language : 'c')
+
+# add_global_arguments('-O3', language : 'c')
 executable('basic_avx512', 'basic_avx512.c')
-executable('radix_counting', 'radix_counting.c')
+radix_counting = executable('radix_counting', 'radix_counting.c')
+test('rad', radix_counting)

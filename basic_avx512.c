@@ -1,4 +1,6 @@
-/* gcc -march=native basic_avx512.c -o basic_avx512
+/* Basic example showing how to use intrinsics and printing the result.
+
+gcc -O2 -fno-trapping-math -fno-math-errno -fno-signed-zeros -mavx512f basic_avx512.c -o basic_avx512
 */
 #include <x86intrin.h>
 #include <stdio.h>
