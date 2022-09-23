@@ -128,6 +128,73 @@ There's a book "Modern Parallel Programming with C++ and Assembly Language: X86 
 https://stackoverflow.com/questions/41639654/how-to-help-gcc-vectorize-c-code
 
 
+# day 4
+
+For 512bit vectors, it's suggested (by Optimizing software in C++ book and elsewhere) that AVX-512 should work on 64 byte aligned pointers. Malloc doesn't do this, and we can't control the alignment on input arrays always.
+
+Rounding up to 64 byte alignment is suggested as a solution. We can do this instead from malloc, we process the first number of elements in a serial way. Usually malloc gives back data aligned at 16, if our elements are 4 (or power of 2), then this should be possible.
 
 
+64 byte alignment looks like this: 
+```
+0, 64, 128, ...
+```
+
+Assume we get back a pointer at 16, then it looks like this:
+```
+16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64
+```
+
+The pseudo code of the loop will then be like this:
+```
+aligned_data, remaining_data = process_data_upto_64_alignment()
+process_aligned_data(aligned_data)
+process_remaining_data(remaining_data)
+```
+
+The process_aligned_data function can use __assume_aligned, and only process in 512bit aligned chunks. Then we can process the left over data at the end. It should also use __restrict to tell it this data is not aliased. This should give the compiler the best opportunity to work.
+
+Note, the processing at the start, and at the end can use the same serial function.
+
+This explains __assume and __assume_aligned: [Data Alignment to Assist Vectorization](https://www.intel.com/content/www/us/en/developer/articles/technical/data-alignment-to-assist-vectorization.html)
+
+
+
+
+https://stackoverflow.com/questions/41639654/how-to-help-gcc-vectorize-c-code
+
+```
+typedef  float  vec2f __attribute__((vector_size (8), aligned (8)));  /* 64 bits; MMX, 3DNow! */
+typedef  float  vec4f __attribute__((vector_size (16), aligned (16))); /* 128 bits; SSE */
+typedef  float  vec8f __attribute__((vector_size (32), aligned (32))); /* 256 bits; AVX, AVX2 */
+typedef  float  vec16f __attribute__((vector_size (64), aligned (64))); /* 512 bits; AVX512F */
+```
+
+
+This flag tells gcc to print out vectorizing debug info: `-fopt-info-vec-all`
+
+How to build in release mode with meson: `--buildtype=release`.
+```bash
+meson buildfolder --reconfigure --buildtype=release
+```
+
+
+# day 5
+
+Yesterday I played around with autovectorization a lot. Whilst I learnt some, it didn't help with autovectorizing the function I was trying to with it. It was too complex for the autovectorizer in gcc. It would be interesting to know if Intels icc would be able to do it.
+
+Additionally, I spent some time updating to the latest Windows 11, and Ubuntu 22.04 LTS. Was hoping to perhaps see some difference with gcc or clang and autovectorization with the newer versions. But for this complex function, the answer is no.
+
+I did find out about the posix memory alignment functions. It also made me realize that different compilers implement all the vector size and alignment stuff in slightly different ways. Things like `__assume` and `__assume_aligned__` aren't really things on gcc for example (but are on icc). Doing stuff portably in C is always a challenge, and reminded me how wonderful portable C libraries (like SDL) are. It's very much how the situation was with web browsers and early JavaScript APIs. The MS compiler typically did things in it's own way, but at least clang and gcc collaborate to try and have some sort of standard APIs for things. Intel made there own aligned malloc function because they didn't want to use the posix one on windows. That's an example of non-portability in a way inside a single compiler!
+
+- Another article on using masks. Using the array sum example(strangely popular example in the vectorization literature). It shows how a lot of the algorithms can be similar with AVX-2 and AVX-512, but that AVX-512 does have some extra functionality, not just wider vectors. Made me also think that perhaps prototyping an algorithm with an array language (like numpy) might be a good idea to help understand it better. [Accelerating Compute-Intensive Workloads with Intel® AVX-512](https://devblogs.microsoft.com/cppblog/accelerating-compute-intensive-workloads-with-intel-avx-512/)
+- The benchmark source code from the ms/intel blog above has an interesting feature in that it uses a hack to prevent the compiler from optimizing a function (incrementing a global variable). https://github.com/intel/Developer-Tools-Runtimes-Blogs/blob/master/AVX512_Blog/AverageFloat.cpp#L66
+- It was interesting to find out that the mask registers in avx-512 are reusing mmx registers. [AVX-512 Mask Registers, Again](https://travisdowns.github.io/blog/2020/05/26/kreg2.html)
+
+Another interesting thing is that at 03 optimization, I noticed where the algorithm was broken up into multiple functions didn't perform as well as the single function one. This is not supposed to happen these days. Something like a 10% difference, even when using inline. I've seen this before, and is really unfortunate... because it encourages big functions or macro abuse rather than writing nice small functions.
+
+https://learn.microsoft.com/lv-lv/cpp/c-runtime-library/reference/countof-macro?view=msvc-170
+```c
+#define _countof(array) (sizeof(array) / sizeof(array[0]))
+```
 

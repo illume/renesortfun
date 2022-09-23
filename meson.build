@@ -3,6 +3,7 @@ add_global_arguments('-mavx512f', language : 'c')
 add_global_arguments('-fno-trapping-math', language : 'c')
 add_global_arguments('-fno-math-errno', language : 'c')
 add_global_arguments('-fno-signed-zeros', language : 'c')
+add_global_arguments('-fopt-info-vec-all', language : 'c')
 
 # add_global_arguments('-O3', language : 'c')
 executable('basic_avx512', 'basic_avx512.c')
