@@ -1,5 +1,7 @@
 # Rene sort fun(ction)
 
+Note: this is just experimental code, please don't use.
+
 Some time ago, MS enabled avx512f in HyperV/WSL so now it would be convenient to work on. As well, AMD are releasing avx512 support in their next generation CPUs so it seems the instruction set isn't dead. I haven't really done any avx512 stuff, so am looking forward to learning that. Another thing I want to try is SIMD everywhere(SIMDe), which allows porting Intrinsics to different architectures. I've used SSE2neon, but SIMDe is much more further along (but still missing many parts of the massive avx512 instruction set). I'm interested to know what sort of performance it can give on apple silicon for a straight port using avx512... if SIMDe supports the instrinsics needed. Not super optimistic I'll finish, but will make a start for sure and will hopefully be able to answer the novel question about the suitability of SIMDe for avx512 and sorting.
 
 ## day 0
@@ -128,7 +130,7 @@ There's a book "Modern Parallel Programming with C++ and Assembly Language: X86 
 https://stackoverflow.com/questions/41639654/how-to-help-gcc-vectorize-c-code
 
 
-# day 4
+## day 3
 
 For 512bit vectors, it's suggested (by Optimizing software in C++ book and elsewhere) that AVX-512 should work on 64 byte aligned pointers. Malloc doesn't do this, and we can't control the alignment on input arrays always.
 
@@ -179,9 +181,9 @@ meson buildfolder --reconfigure --buildtype=release
 ```
 
 
-# day 5
+## day 4
 
-Yesterday I played around with autovectorization a lot. Whilst I learnt some, it didn't help with autovectorizing the function I was trying to with it. It was too complex for the autovectorizer in gcc. It would be interesting to know if Intels icc would be able to do it.
+Yesterday I played around with autovectorization a lot. Whilst I learnt some, it didn't help with autovectorizing the function I was trying to with it. It was too complex for the autovectorizer in gcc. It would be interesting to know if Intel's icc would be able to do it.
 
 Additionally, I spent some time updating to the latest Windows 11, and Ubuntu 22.04 LTS. Was hoping to perhaps see some difference with gcc or clang and autovectorization with the newer versions. But for this complex function, the answer is no.
 
@@ -197,4 +199,76 @@ https://learn.microsoft.com/lv-lv/cpp/c-runtime-library/reference/countof-macro?
 ```c
 #define _countof(array) (sizeof(array) / sizeof(array[0]))
 ```
+
+
+- [vectorizing a loop](https://travisdowns.github.io/blog/2019/08/26/vector-inc.html)
+
+> Auto-vectorization explains all the very fast results: gcc only autovectorizes at -O3 but clang does it at -O2 and -O3 by default. The -O3 result for gcc is somewhat slower than clang because it does not unroll the autovectorized loop.
+
+meson defaults to -O2 with gcc... which probably explains lack of vectorization.
+
+- How to use -O3 with meson? (it's enabled with `--buildtype=release` also see for custom flags like -g -03 https://stackoverflow.com/questions/64794068/how-to-set-debug-and-optimization-flag-with-meson)
+- How to use clang with meson? (Set up the relevant C/C++ environmental variables. i.e. CC=clang and CXX=clang++. Then run the build using meson build-clang.)
+
+This compiler tool is wonderful: https://godbolt.org/z/JpwcRN You can quickly see how different compilers compile something. It shows which part of the C/C++/Rust code compiles to what assembly. It's got Intel ICC and different versions of compilers, and different architectures.
+
+- Intel icc is available for free as part of oneAPI. [Install Intel oneAPI C++ and Fortran compiler
+](https://www.scivision.dev/intel-oneapi-fortran-install/)
+- Oh, the [AVX-512](https://en.wikipedia.org/wiki/AVX-512) is actually pretty good.
+- The "vectorizor advizor" [Intel_Advisor](https://en.wikipedia.org/wiki/Intel_Advisor)
+
+- Set of resources from Intel on vectorization... [Vectorization Essentials](https://www.intel.com/content/www/us/en/developer/articles/technical/vectorization-essential.html)
+
+- __rdtsc for different timing [__rdtsc](https://learn.microsoft.com/en-us/cpp/intrinsics/rdtsc?view=msvc-170)
+
+
+I tested a few things in the average_float.c
+
+- _mm512_load_ps was a bit faster than _mm512_loadu_ps as advertised, because it handled aligned data more quickly.
+- the serial function was vectorized... but not very well. I didn't get around to changing that into a 16 accumulators and check if it is also vectorized. But I expect it would.
+
+### other implementations and reading
+
+- avx-512 sort, original patch was in C, based on papers. compress store instruction useful,  https://github.com/numpy/numpy/blob/d66ca35de0cae4e41471dc44793c18511eb45109/numpy/core/src/npysort/x86-qsort.dispatch.cpp
+    - https://github.com/numpy/numpy/pull/21099#issuecomment-1063422784
+    - https://github.com/numpy/numpy/pull/20133
+    - matlab sort is faster than numpy sort because it uses multiple cores (prior to AVX-512 patch)
+    - does not port well to less than 512 bits because no compress store instruction
+    - numpy has a pretty good infrastructure now for sort, including testing and benchmarking.
+    - numpy has no current multi core parallel support for sort.
+    - apparently better than IPP radix sort
+- https://github.com/jmakino/simdsort
+- https://github.com/WojciechMula/simd-sort
+- https://devmesh.intel.com/projects/parallel-stable-sort-performance-optimization-using-intel-parallel-studio-xe-and-intel-oneapi-hpc-toolkit#project-docs
+- https://github.com/numpy/numpy/pull/21099#issuecomment-1063422784
+- parallel sort is quite useful was well https://s3-us-west-2.amazonaws.com/near-me-oregon/instances/132/uploads/attachments/custom_attachment/file/17195/Accelerating_Big_Data_Sorting_Performance_To_Speed_Up_The_Time_For_Insights_And_Solutions_ArthurRatz_SC2020.pdf
+- https://github.com/arthurratz/intel_parallel_stable_sort_oneapi
+- Duplicate values is something some sorts are not robust against. Many algorithms don't seem to have any fast paths for this. [Fast and Robust Vectorized In-Place Sorting of Primitive Types](https://drops.dagstuhl.de/opus/volltexte/2021/13775/pdf/LIPIcs-SEA-2021-3.pdf)
+- https://github.com/simd-sorting/fast-and-robust
+- https://github.com/xtensor-stack/xsimd
+- [In-place Parallel Super Scalar Samplesort (IPS⁴o)](https://github.com/SaschaWitt/ips4o)
+- Has int, double, and key/value int pairs. Also uses openmp. [AVX-512 sort functions](https://github.com/berenger-eu/avx-512-sort)
+    - https://arxiv.org/abs/1704.08579
+    - ARM SVE here: https://gitlab.inria.fr/bramas/arm-sve-sort
+- https://github.com/Tabasz/quick-AVX-512-sort
+- bitonic in register sort, plus merge sort using multi core [Efficient Parallel Sort on AVX-512-Based Multi-Core and Many-Core Architectures](https://ieeexplore.ieee.org/document/8855628)
+- radix sort of fix length strings [LSD string sort](https://www.informit.com/articles/article.aspx?p=2180073&seqNum=2)
+- multiple length string sorting [MSD string sort](https://www.informit.com/articles/article.aspx?p=2180073&seqNum=3)
+- [Sorting_network](https://en.wikipedia.org/wiki/Sorting_network)
+- [Bitonic_sorter](https://en.wikipedia.org/wiki/Bitonic_sorter)
+
+
+# Conclusion of day 4
+
+I didn't get around to completing a sort function that uses AVX-512. But did test a few things out on the way there. I think I know how a radix counting sort could be implemented, but it would be quite complex to vectorize. I see others have made vectorized quick sort implementations, and that it can be done.
+
+- books, I did find two good books on SIMD and AVX-512 optimization, but even with these the existing literature is very limited compared to other instruction sets (like SSE). However a lot of the SSE and AVX techniques can be reused with higher widths... but there are new techniques with AVX-512.
+- tools, I discovered how to use icc compiler and other intel tools (vectorizor advizor) without monetary cost, how to quickly check the auto-vectorizors in different compilers, learnt some things about the meson build tool.
+- techniques, how to help the compiler with alignment and vector size annotations, how to handle the start and end of blocks, timing, how to check auto vectorization logs for why loops/functions aren't vectorizing, how to convert some serial algorithms to vector ones pretty easily, learnt about portability problems and how to solve them, and basic stuff like what flags are required to compile.
+
+## What's next?
+
+Probably taking an existing quick sort implementation and production-izing it would be the quickest path to getting something useful done. To do this, getting the testing infrastructure working well is important. Having different types of data to sort is an important test. Things like ascending, descending, presorted, and random are some of the data sets needed to test with. But also unaligned data, small data, and bigger than cache size data. Having benchmarks which can be easily run on different CPUs is important. CPU dispatch is another tricky thing to do, that can probably be tested most easily with qemu. Of course implementing all the standard testing infrastructure like *san and fuzzing needs to be done.
+
+I still feel like the counting radix sort is worth pursuing, because theoretically there is enough register space. Also, more research could be done to look into existing SIMD sort implementations.
 

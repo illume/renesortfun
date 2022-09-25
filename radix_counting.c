@@ -449,8 +449,8 @@ int main()
         {
             // QuickSort(arr, COUNT);
             // QuickSortStd(arr, COUNT);
-            RadixSort256(arr, COUNT);
-            // RadixSort256SIMD(arr, COUNT);
+            // RadixSort256(arr, COUNT);
+            RadixSort256SIMD(arr, COUNT);
         }
         long finishTime = clock();
         printf("TIME: %ld\n", finishTime - startTime);
